@@ -5,6 +5,7 @@ let currentPage = 1;
 let currentLevel = 'ALL';
 let currentSearch = '';
 let map = null;
+let mapMarkers = [];
 
 // ── Navigation ──────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -178,137 +179,76 @@ function renderBarChart(containerId, data, colorClass) {
     }).join('');
 }
 
-// ── Choropleth Map ──────────────────────────────────────────────────────────
-const GEOJSON_URL = 'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson';
-let geoLayer = null;
-
+// ── Map ─────────────────────────────────────────────────────────────────────
 async function loadMapData() {
     const res = await fetch(`${API}/api/map_data`);
     window._mapData = await res.json();
-    // Build lookup by country code
-    window._mapLookup = {};
-    let totalContainers = 0, countryCount = 0;
-    window._mapData.forEach(d => {
-        window._mapLookup[d.country] = d;
-        totalContainers += d.total;
-        countryCount++;
-    });
-    const summaryEl = document.getElementById('map-summary');
-    if (summaryEl) summaryEl.textContent = `${countryCount} countries • ${totalContainers.toLocaleString()} total containers`;
-    if (map) renderChoropleth();
-}
-
-function riskColor(score) {
-    if (score <= 0) return '#161b22';
-    if (score <= 10) return '#1a4d2e';
-    if (score <= 20) return '#3fb950';
-    if (score <= 35) return '#a3d977';
-    if (score <= 50) return '#d4e157';
-    if (score <= 65) return '#ffca28';
-    if (score <= 80) return '#f85149';
-    return '#da3633';
+    if (map) renderMapMarkers();
 }
 
 function initMap() {
     if (map) return;
     map = L.map('map', {
-        center: [25, 20],
+        center: [25, 40],
         zoom: 2,
         minZoom: 2,
         maxZoom: 6,
         attributionControl: false,
-        zoomControl: true,
-        worldCopyJump: true
+        zoomControl: true
     });
 
     // Dark tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
         maxZoom: 19
     }).addTo(map);
 
-    // Load GeoJSON and render
-    fetch(GEOJSON_URL)
-        .then(r => r.json())
-        .then(geojson => {
-            window._geoData = geojson;
-            if (window._mapData) renderChoropleth();
-        });
+    if (window._mapData) renderMapMarkers();
 }
 
-// ISO-3 to ISO-2 mapping for matching API data
-const iso3to2 = {
-    AFG:'AF',ALB:'AL',DZA:'DZ',AGO:'AO',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',AZE:'AZ',
-    BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
-    BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',
-    CMR:'CM',CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',
-    COG:'CG',COD:'CD',CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',
-    DJI:'DJ',DOM:'DO',ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',ETH:'ET',
-    FJI:'FJ',FIN:'FI',FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',
-    GTM:'GT',GIN:'GN',GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',
-    IDN:'ID',IRN:'IR',IRQ:'IQ',IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',
-    KAZ:'KZ',KEN:'KE',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',
-    LBY:'LY',LIE:'LI',LTU:'LT',LUX:'LU',MKD:'MK',MDG:'MG',MWI:'MW',MYS:'MY',MLI:'ML',
-    MLT:'MT',MRT:'MR',MUS:'MU',MEX:'MX',MDA:'MD',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',
-    MMR:'MM',NAM:'NA',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',PRK:'KP',
-    NOR:'NO',OMN:'OM',PAK:'PK',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',
-    PRT:'PT',QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',SAU:'SA',SEN:'SN',SRB:'RS',SLE:'SL',
-    SGP:'SG',SVK:'SK',SVN:'SI',SOM:'SO',ZAF:'ZA',KOR:'KR',SSD:'SS',ESP:'ES',LKA:'LK',
-    SDN:'SD',SUR:'SR',SWZ:'SZ',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',TZA:'TZ',
-    THA:'TH',TLS:'TL',TGO:'TG',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',UGA:'UG',UKR:'UA',
-    ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VEN:'VE',VNM:'VN',YEM:'YE',ZMB:'ZM',
-    ZWE:'ZW',PSE:'PS',XKX:'XK',SXM:'SX',CUW:'CW',SSD:'SS',COK:'CK'
-};
+function renderMapMarkers() {
+    mapMarkers.forEach(m => map.removeLayer(m));
+    mapMarkers = [];
 
-function renderChoropleth() {
-    if (!window._geoData || !window._mapLookup) return;
-    if (geoLayer) map.removeLayer(geoLayer);
+    window._mapData.forEach(d => {
+        const radius = Math.max(5, Math.min(25, Math.sqrt(d.total) * 1.5));
+        let color = '#3fb950';
+        if (d.critical > 0) color = '#f85149';
+        else if (d.low_risk > 0) color = '#d29922';
 
-    const infoBox = document.getElementById('map-info');
+        const circle = L.circleMarker([d.lat, d.lng], {
+            radius: radius,
+            fillColor: color,
+            fillOpacity: 0.6,
+            color: color,
+            weight: 1,
+            opacity: 0.8
+        }).addTo(map);
 
-    geoLayer = L.geoJSON(window._geoData, {
-        style: feature => {
-            const iso3 = feature.properties.ISO_A3;
-            const iso2 = iso3to2[iso3] || '';
-            const d = window._mapLookup[iso2];
-            const score = d ? d.avg_risk_score : -1;
-            return {
-                fillColor: riskColor(score),
-                weight: 1,
-                opacity: 0.7,
-                color: '#30363d',
-                fillOpacity: score >= 0 ? 0.85 : 0.15
-            };
-        },
-        onEachFeature: (feature, layer) => {
-            const iso3 = feature.properties.ISO_A3;
-            const iso2 = iso3to2[iso3] || '';
-            const d = window._mapLookup[iso2];
+        circle.bindPopup(`
+            <div class="popup-title">${d.country}</div>
+            <div class="popup-row"><span class="popup-label">Total</span><span>${d.total}</span></div>
+            <div class="popup-row"><span class="popup-label">Critical</span><span style="color:#f85149">${d.critical}</span></div>
+            <div class="popup-row"><span class="popup-label">Low Risk</span><span style="color:#d29922">${d.low_risk}</span></div>
+            <div class="popup-row"><span class="popup-label">Clear</span><span style="color:#3fb950">${d.clear}</span></div>
+        `);
 
-            layer.on({
-                mouseover: e => {
-                    e.target.setStyle({ weight: 2, color: '#e6edf3', fillOpacity: 0.95 });
-                    e.target.bringToFront();
-                    if (d && infoBox) {
-                        infoBox.style.display = 'block';
-                        infoBox.innerHTML = `
-                            <div class="info-country">${iso2}</div>
-                            <div class="info-row">Total_Containers=<b>${d.total.toLocaleString()}</b></div>
-                            <div class="info-row">Critical_Count=<b>${d.critical}</b></div>
-                            <div class="info-row">Avg_Risk_Score=<b>${d.avg_risk_score}</b></div>
-                        `;
-                    }
-                },
-                mouseout: e => {
-                    geoLayer.resetStyle(e.target);
-                    if (infoBox) infoBox.style.display = 'none';
-                },
-                click: e => {
-                    map.fitBounds(e.target.getBounds());
-                }
-            });
+        // Pulse animation for critical
+        if (d.critical > 2) {
+            const pulse = L.circleMarker([d.lat, d.lng], {
+                radius: radius + 8,
+                fillColor: '#f85149',
+                fillOpacity: 0,
+                color: '#f85149',
+                weight: 2,
+                opacity: 0.4,
+                className: 'pulse-marker'
+            }).addTo(map);
+            mapMarkers.push(pulse);
         }
-    }).addTo(map);
+
+        mapMarkers.push(circle);
+    });
 }
 
 // ── Predictions ─────────────────────────────────────────────────────────────
