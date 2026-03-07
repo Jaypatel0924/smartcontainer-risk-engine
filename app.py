@@ -382,11 +382,11 @@ def api_chat():
         return jsonify({'reply': reply})
     except Exception as e:
         err = str(e)
-        if 'API_KEY_INVALID' in err or 'invalid' in err.lower():
-            return jsonify({'reply': '❌ Invalid API key. Please set a valid Gemini API key using the 🔑 button.'})
-        if '429' in err or 'quota' in err.lower() or 'rate' in err.lower():
+        if '429' in err or 'quota' in err.lower() or 'exceeded' in err.lower():
             return jsonify({'reply': '⏳ **Rate limit reached.** Your Gemini API free tier quota is exhausted. Please wait a minute and try again, or enable billing on your Google AI account for higher limits.'})
-        return jsonify({'reply': f'⚠️ Error: {err}'})
+        if 'API_KEY_INVALID' in err:
+            return jsonify({'reply': '❌ Invalid API key. Please set a valid Gemini API key using the 🔑 button.'})
+        return jsonify({'reply': '⚠️ Something went wrong. Please try again in a moment.'})
 
 
 def build_data_context():
@@ -512,13 +512,32 @@ RISK THRESHOLDS:
 {data_ctx}
 {container_ctx}
 
-INSTRUCTIONS:
-- Answer based on the actual data above. Be specific with numbers.
-- Use markdown formatting: **bold** for emphasis, bullet points with •
-- If asked about a specific container, provide all its details from the data.
-- If data doesn't contain the answer, say so honestly.
-- Keep answers concise but informative. Use emojis for risk levels (🔴 Critical, 🟡 Low Risk, 🟢 Clear).
-- If the user asks about something unrelated to container risk/customs, politely redirect them.
+STRICT OUTPUT FORMAT RULES (you MUST follow these exactly):
+1. ALWAYS start with a **bold title** on the first line summarizing the answer.
+2. Use SECTIONS with bold headers like **Section Name:** on their own line.
+3. Use bullet points with • for lists. Each bullet on its own line.
+4. Use **bold** for all numbers, percentages, scores, container IDs, and key values.
+5. For container lookups, ALWAYS use this exact structure:
+   **Container {ID} — {Risk Level Emoji} {Risk Level}**
+   • Risk Score: **{score}/100**
+   • Origin: **{country}**
+   • Destination: **{port}**
+   • Dwell Time: **{hours}h**
+   • Declared Value: **${value}**
+   • Explanation: {reason}
+6. For summaries, ALWAYS use this structure:
+   **📊 Dataset Summary**
+   • Total Containers: **{n}**
+   • 🔴 Critical: **{n}** ({pct}%)
+   • 🟡 Low Risk: **{n}** ({pct}%)
+   • 🟢 Clear: **{n}** ({pct}%)
+   • Average Risk Score: **{score}**
+7. For top-N lists, use numbered items: 1. **{name}** — {details}
+8. NEVER give generic/vague answers. Always include specific data from above.
+9. NEVER make up data. If it's not in the context, say "Data not available."
+10. NEVER answer questions unrelated to container risk or customs. Politely redirect.
+11. Keep responses concise — max 15 bullet points unless the user asks for more detail.
+12. Use emojis: 🔴 Critical, 🟡 Low Risk, 🟢 Clear, 📊 stats, 🚢 ports, 🌍 countries, ⚖️ weight, ⏱️ dwell.
 """
 
     model = genai.GenerativeModel(
@@ -526,13 +545,11 @@ INSTRUCTIONS:
         system_instruction=system_prompt
     )
 
-    # Use per-session chat history for multi-turn
-    session_id = 'default'
-    if session_id not in _chat_sessions:
-        _chat_sessions[session_id] = model.start_chat(history=[])
-
-    chat = _chat_sessions[session_id]
+    # Fresh chat each time so data context is always current
+    chat = model.start_chat(history=_chat_sessions.get('history', []))
     response = chat.send_message(user_msg)
+    # Keep last 10 turns of history for context
+    _chat_sessions['history'] = chat.history[-20:] if len(chat.history) > 20 else chat.history
     return response.text
 
 

@@ -601,10 +601,25 @@ function removeTyping() {
 }
 
 function formatMarkdown(text) {
+    // Sanitize HTML tags from AI output
+    text = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return text
+        // Headers: ### or ## or #
+        .replace(/^### (.+)$/gm, '<strong style="font-size:13px;color:var(--blue)">$1</strong>')
+        .replace(/^## (.+)$/gm, '<strong style="font-size:14px;color:var(--blue)">$1</strong>')
+        .replace(/^# (.+)$/gm, '<strong style="font-size:15px;color:var(--blue)">$1</strong>')
+        // Bold
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>')
-        .replace(/• /g, '&bull; ');
+        // Italic
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Numbered lists: 1. item
+        .replace(/^(\d+)\. (.+)$/gm, '<div style="margin-left:8px"><strong>$1.</strong> $2</div>')
+        // Bullet points
+        .replace(/^[•\-\*] (.+)$/gm, '<div style="margin-left:8px">&bull; $1</div>')
+        // Horizontal rule ---
+        .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:6px 0">')
+        // Line breaks
+        .replace(/\n/g, '<br>');
 }
 
 // Enter key sends message
