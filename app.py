@@ -264,14 +264,40 @@ def api_upload():
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'Only CSV files accepted'}), 400
 
-    df = pd.read_csv(io.BytesIO(file.read()))
+    try:
+        df = pd.read_csv(io.BytesIO(file.read()))
+    except Exception as e:
+        return jsonify({'error': f'Failed to read CSV: {str(e)}'}), 400
+
     required = ['Container_ID','Declared_Weight','Measured_Weight','Dwell_Time_Hours','Declared_Value']
     missing = [c for c in required if c not in df.columns]
     if missing:
         return jsonify({'error': f'Missing columns: {", ".join(missing)}'}), 400
 
-    predictor = RiskPredictor()
-    preds = predictor.predict(df)
+    # Fill optional columns with defaults so the pipeline doesn't break
+    defaults = {
+        'Declaration_Date (YYYY-MM-DD)': '2025-01-01',
+        'Declaration_Time': '12:00:00',
+        'Trade_Regime (Import / Export / Transit)': 'Import',
+        'Origin_Country': 'ZZ',
+        'Destination_Port': 'PORT_40',
+        'Destination_Country': 'ZZ',
+        'HS_Code': '000000',
+        'Importer_ID': 'UNKNOWN',
+        'Exporter_ID': 'UNKNOWN',
+        'Shipping_Line': 'LINE_MODE_10',
+        'Clearance_Status': 'Clear',
+    }
+    for col, default in defaults.items():
+        if col not in df.columns:
+            df[col] = default
+
+    try:
+        predictor = RiskPredictor()
+        preds = predictor.predict(df)
+    except Exception as e:
+        return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
+
     for col in ['Origin_Country','Destination_Port','Dwell_Time_Hours',
                  'Declared_Value','HS_Code','Declared_Weight','Measured_Weight']:
         if col in df.columns:
@@ -281,6 +307,8 @@ def api_upload():
 
     _cache['preds'] = preds
     _cache['df'] = df
+    if 'feat_imp' in _cache:
+        del _cache['feat_imp']
 
     total = len(preds)
     critical = int((preds['Risk_Level']=='Critical').sum())
