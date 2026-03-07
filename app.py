@@ -5,7 +5,7 @@ Serves predictions, stats, and data for the HTML/CSS/JS dashboard
 from flask import Flask, jsonify, request, send_from_directory, send_file
 import pandas as pd
 import numpy as np
-import pickle, os, io
+import pickle, os, io, re
 from predict import RiskPredictor
 from utils import load_data
 
@@ -299,6 +299,239 @@ def api_export():
     preds.to_csv(buf, index=False)
     buf.seek(0)
     return send_file(buf, mimetype='text/csv', as_attachment=True, download_name='risk_predictions.csv')
+
+# ── Chatbot ──────────────────────────────────────────────────────────────────
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    data = request.get_json()
+    if not data or 'message' not in data:
+        return jsonify({'reply': 'Please send a message.'}), 400
+    msg = data['message'].strip()
+    if not msg:
+        return jsonify({'reply': 'Please type a question about your container risk data.'})
+    reply = chatbot_reply(msg)
+    return jsonify({'reply': reply})
+
+
+def chatbot_reply(msg):
+    """Rule-based chatbot that answers questions about the container risk data."""
+    low = msg.lower()
+    preds = get_predictions()
+    total = len(preds)
+    critical = int((preds['Risk_Level'] == 'Critical').sum())
+    low_risk = int((preds['Risk_Level'] == 'Low Risk').sum())
+    clear = int((preds['Risk_Level'] == 'Clear').sum())
+    avg_score = round(float(preds['Risk_Score'].mean()), 2)
+
+    # ── Greeting ──
+    if re.search(r'\b(hi|hello|hey|greetings|good morning|good afternoon)\b', low):
+        return (f"Hello! I'm the SmartContainer Risk Assistant. I can answer questions about your "
+                f"{total:,} containers — risk levels, countries, ports, features, model info, and more. "
+                f"Try asking: \"How many critical containers?\" or \"Tell me about container 12345\".")
+
+    # ── Help ──
+    if re.search(r'\b(help|what can you|what do you|how to use|commands)\b', low):
+        return ("Here's what I can help with:\n"
+                "• **Statistics** — \"How many critical containers?\"\n"
+                "• **Container lookup** — \"Tell me about container 12345\"\n"
+                "• **Country analysis** — \"Which countries are high risk?\" or \"Show me CN stats\"\n"
+                "• **Port analysis** — \"What are the riskiest ports?\"\n"
+                "• **Feature importance** — \"What features matter most?\"\n"
+                "• **Model info** — \"What model do you use?\" or \"What is the accuracy?\"\n"
+                "• **Thresholds** — \"What makes a container critical?\"\n"
+                "• **Data summary** — \"Give me a summary\"")
+
+    # ── Container lookup ──
+    cid_match = re.search(r'\b(\d{5,})\b', msg)
+    if cid_match or re.search(r'\bcontainer\b', low):
+        if cid_match:
+            cid = cid_match.group(1)
+            row = preds[preds['Container_ID'].astype(str) == cid]
+            if len(row) > 0:
+                r = row.iloc[0]
+                level_emoji = {'Critical': '🔴', 'Low Risk': '🟡', 'Clear': '🟢'}.get(r['Risk_Level'], '')
+                reply = (f"**Container {cid}** {level_emoji}\n"
+                         f"• Risk Score: **{r['Risk_Score']:.1f}** / 100\n"
+                         f"• Risk Level: **{r['Risk_Level']}**\n")
+                if 'Origin_Country' in r and pd.notna(r.get('Origin_Country')):
+                    reply += f"• Origin: {r['Origin_Country']}\n"
+                if 'Destination_Port' in r and pd.notna(r.get('Destination_Port')):
+                    reply += f"• Destination: {r['Destination_Port']}\n"
+                if 'Dwell_Time_Hours' in r and pd.notna(r.get('Dwell_Time_Hours')):
+                    reply += f"• Dwell Time: {r['Dwell_Time_Hours']:.1f} hours\n"
+                if 'Declared_Value' in r and pd.notna(r.get('Declared_Value')):
+                    val = r['Declared_Value']
+                    reply += f"• Declared Value: ${val:,.0f}\n"
+                if 'Explanation' in r and pd.notna(r.get('Explanation')):
+                    reply += f"• Reason: {r['Explanation']}"
+                return reply
+            else:
+                return f"Container **{cid}** not found in the current dataset of {total:,} containers."
+        else:
+            return ("Please provide a container ID number. Example: \"Tell me about container 47386228\"")
+
+    # ── Summary / overview ──
+    if re.search(r'\b(summary|overview|status|dashboard|report|how many total)\b', low):
+        crit_pct = round(critical / total * 100, 2)
+        return (f"📊 **Dataset Summary**\n"
+                f"• Total Containers: **{total:,}**\n"
+                f"• 🔴 Critical: **{critical:,}** ({crit_pct}%)\n"
+                f"• 🟡 Low Risk: **{low_risk:,}** ({round(low_risk/total*100,2)}%)\n"
+                f"• 🟢 Clear: **{clear:,}** ({round(clear/total*100,2)}%)\n"
+                f"• Average Risk Score: **{avg_score}**")
+
+    # ── Critical count ──
+    if re.search(r'\b(critical|dangerous|high risk|highest risk|red)\b', low) and re.search(r'\b(how many|count|number|total)\b', low):
+        return f"There are **{critical:,}** Critical containers out of {total:,} total ({round(critical/total*100,2)}%)."
+
+    # ── Low risk count ──
+    if re.search(r'\b(low risk|medium|yellow)\b', low) and re.search(r'\b(how many|count|number|total)\b', low):
+        return f"There are **{low_risk:,}** Low Risk containers out of {total:,} total ({round(low_risk/total*100,2)}%)."
+
+    # ── Clear count ──
+    if re.search(r'\b(clear|safe|green|clean)\b', low) and re.search(r'\b(how many|count|number|total)\b', low):
+        return f"There are **{clear:,}** Clear containers out of {total:,} total ({round(clear/total*100,2)}%)."
+
+    # ── Average score ──
+    if re.search(r'\b(average|avg|mean)\b', low) and re.search(r'\b(score|risk)\b', low):
+        return f"The average risk score across all {total:,} containers is **{avg_score}** / 100."
+
+    # ── Top critical containers ──
+    if re.search(r'\b(top|worst|most dangerous|highest|riskiest)\b', low) and re.search(r'\b(container|risk)\b', low):
+        top = preds.nlargest(5, 'Risk_Score')
+        lines = ["**Top 5 Highest Risk Containers:**"]
+        for i, (_, r) in enumerate(top.iterrows(), 1):
+            origin = r.get('Origin_Country', '?')
+            lines.append(f"{i}. Container **{r['Container_ID']}** — Score: {r['Risk_Score']:.1f}, "
+                         f"Level: {r['Risk_Level']}, Origin: {origin}")
+        return '\n'.join(lines)
+
+    # ── Country analysis ──
+    if re.search(r'\b(countr|origin|nation|region)\b', low):
+        if 'Origin_Country' in preds.columns:
+            # Check for a specific country code
+            cc_match = re.search(r'\b([A-Z]{2})\b', msg)
+            if cc_match:
+                cc = cc_match.group(1)
+                c_data = preds[preds['Origin_Country'] == cc]
+                if len(c_data) > 0:
+                    c_crit = int((c_data['Risk_Level'] == 'Critical').sum())
+                    c_low = int((c_data['Risk_Level'] == 'Low Risk').sum())
+                    c_clear = int((c_data['Risk_Level'] == 'Clear').sum())
+                    c_avg = round(float(c_data['Risk_Score'].mean()), 1)
+                    return (f"🌍 **Country: {cc}**\n"
+                            f"• Total Containers: {len(c_data):,}\n"
+                            f"• 🔴 Critical: {c_crit}\n"
+                            f"• 🟡 Low Risk: {c_low}\n"
+                            f"• 🟢 Clear: {c_clear}\n"
+                            f"• Avg Risk Score: {c_avg}")
+                else:
+                    return f"No containers found from country **{cc}**."
+
+            # Top critical origins
+            crit_df = preds[preds['Risk_Level'] == 'Critical']
+            top_origins = crit_df['Origin_Country'].value_counts().head(8)
+            lines = ["**Top Countries by Critical Containers:**"]
+            for country, count in top_origins.items():
+                lines.append(f"• **{country}**: {count} critical containers")
+            return '\n'.join(lines)
+        return "Origin country data is not available in the current dataset."
+
+    # ── Port analysis ──
+    if re.search(r'\b(port|destination|dock)\b', low):
+        if 'Destination_Port' in preds.columns:
+            port_risk = preds.groupby('Destination_Port')['Risk_Score'].agg(['mean','count']).nlargest(8, 'mean')
+            lines = ["**Top 8 High-Risk Ports:**"]
+            for port, row in port_risk.iterrows():
+                lines.append(f"• **{port}**: Avg Score {row['mean']:.1f}, {int(row['count'])} containers")
+            return '\n'.join(lines)
+        return "Destination port data is not available."
+
+    # ── Feature importance ──
+    if re.search(r'\b(feature|importance|important|factor|what matters|why|cause)\b', low):
+        feat_imp = get_feature_importances()
+        lines = ["**Top Risk Features (RF Importance):**"]
+        for f in feat_imp[:8]:
+            lines.append(f"• **{f['name']}**: {f['value']}%")
+        lines.append("\nWeight discrepancy and dwell time are the strongest risk signals.")
+        return '\n'.join(lines)
+
+    # ── Model info ──
+    if re.search(r'\b(model|algorithm|accuracy|f1|precision|recall|machine learning|ml|how.*work)\b', low):
+        return ("🤖 **Model Information**\n"
+                "• **Primary**: Random Forest (300 estimators, max_depth=30)\n"
+                "• **Anomaly**: Isolation Forest (contamination=3%, 200 estimators)\n"
+                "• **Risk Score**: 70% RF probability + 30% Anomaly score\n"
+                "• **Accuracy**: 99.82% (test), 99.98% (validation)\n"
+                "• **F1 Critical**: 96.68%\n"
+                "• **F1 Low Risk**: 99.62%\n"
+                "• **Features**: 15 engineered features\n"
+                "• **Classes**: Critical, Low Risk, Clear\n"
+                "• **Training**: SMOTE-balanced sampling")
+
+    # ── Thresholds ──
+    if re.search(r'\b(threshold|criteria|rules|what makes|when is|classify)\b', low):
+        return ("**Risk Classification Thresholds:**\n"
+                "• 🔴 **Critical**: Score ≥ 50 — immediate inspection needed\n"
+                "• 🟡 **Low Risk**: Score 20–49 — enhanced monitoring\n"
+                "• 🟢 **Clear**: Score < 20 — routine processing\n\n"
+                "**Key Flags:**\n"
+                "• Weight discrepancy > 20% → suspicious\n"
+                "• Dwell time > 72h → high dwell flag\n"
+                "• Dwell time > 120h → very high dwell\n"
+                "• High-risk origins: CN, RO, VN, ID score higher")
+
+    # ── Weight discrepancy ──
+    if re.search(r'\b(weight|discrepancy|mismatch)\b', low):
+        if 'Declared_Weight' in preds.columns and 'Measured_Weight' in preds.columns:
+            preds_c = preds.copy()
+            preds_c['wt_diff'] = ((preds_c['Measured_Weight'] - preds_c['Declared_Weight']).abs() / preds_c['Declared_Weight'] * 100)
+            high_disc = preds_c[preds_c['wt_diff'] > 20]
+            return (f"**Weight Discrepancy Analysis:**\n"
+                    f"• Containers with >20% discrepancy: **{len(high_disc):,}**\n"
+                    f"• Average discrepancy: {preds_c['wt_diff'].mean():.1f}%\n"
+                    f"• Max discrepancy: {preds_c['wt_diff'].max():.1f}%\n"
+                    f"• Weight discrepancy is the #1 risk feature in the model.")
+        return "Weight data is not available in the current dataset."
+
+    # ── Dwell time ──
+    if re.search(r'\b(dwell|time|hours|wait|delay)\b', low):
+        if 'Dwell_Time_Hours' in preds.columns:
+            avg_dwell = preds['Dwell_Time_Hours'].mean()
+            high_dwell = int((preds['Dwell_Time_Hours'] > 72).sum())
+            very_high = int((preds['Dwell_Time_Hours'] > 120).sum())
+            return (f"**Dwell Time Analysis:**\n"
+                    f"• Average dwell: {avg_dwell:.1f} hours\n"
+                    f"• High dwell (>72h): **{high_dwell:,}** containers\n"
+                    f"• Very high dwell (>120h): **{very_high:,}** containers\n"
+                    f"• Max dwell: {preds['Dwell_Time_Hours'].max():.1f} hours")
+        return "Dwell time data is not available."
+
+    # ── Export ──
+    if re.search(r'\b(export|download|csv|save)\b', low):
+        return ("You can export all predictions as CSV:\n"
+                "• Click the **⬇ Export CSV** button on the Predictions page\n"
+                "• Or use the API directly: `/api/export`")
+
+    # ── Import ──
+    if re.search(r'\b(import|upload|new data|add data)\b', low):
+        return ("To import new data:\n"
+                "• Go to the **Import CSV** page using the sidebar\n"
+                "• Drag & drop or browse for a CSV file\n"
+                "• Required columns: Container_ID, Declared_Weight, Measured_Weight, "
+                "Dwell_Time_Hours, Declared_Value, HS_Code, Origin_Country, Destination_Port, Trade_Regime")
+
+    # ── Fallback ──
+    return (f"I'm not sure how to answer that. I can help with:\n"
+            f"• Container lookups (give me an ID number)\n"
+            f"• Risk statistics and summaries\n"
+            f"• Country and port analysis\n"
+            f"• Feature importance and model info\n"
+            f"• Thresholds and classification rules\n"
+            f"• Weight and dwell time analysis\n\n"
+            f"Try: \"Give me a summary\" or \"Tell me about container 47386228\"")
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

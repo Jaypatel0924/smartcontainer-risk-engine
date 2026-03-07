@@ -489,6 +489,83 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// ── Chatbot ─────────────────────────────────────────────────────────────────
+let chatOpen = false;
+
+function toggleChat() {
+    const panel = document.getElementById('chat-panel');
+    chatOpen = !chatOpen;
+    panel.classList.toggle('open', chatOpen);
+    if (chatOpen) {
+        document.getElementById('chat-input').focus();
+        document.getElementById('chat-badge').style.display = 'none';
+    }
+}
+
+function sendChat() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    appendChatMsg('user', msg);
+    showTyping();
+
+    fetch(`${API}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+    })
+    .then(res => res.json())
+    .then(data => {
+        removeTyping();
+        appendChatMsg('bot', formatMarkdown(data.reply));
+    })
+    .catch(() => {
+        removeTyping();
+        appendChatMsg('bot', 'Sorry, something went wrong. Please try again.');
+    });
+}
+
+function appendChatMsg(role, html) {
+    const container = document.getElementById('chat-messages');
+    const avatar = role === 'bot' ? '🤖' : '👤';
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    div.innerHTML = `<div class="chat-msg-avatar">${avatar}</div><div class="chat-msg-bubble">${html}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg bot';
+    div.id = 'chat-typing';
+    div.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="chat-msg-bubble"><div class="chat-typing"><span></span><span></span><span></span></div></div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function removeTyping() {
+    const el = document.getElementById('chat-typing');
+    if (el) el.remove();
+}
+
+function formatMarkdown(text) {
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>')
+        .replace(/• /g, '&bull; ');
+}
+
+// Enter key sends message
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+    }
+});
+
 // ── Start ───────────────────────────────────────────────────────────────────
 init();
 setTimeout(initMap, 200);
