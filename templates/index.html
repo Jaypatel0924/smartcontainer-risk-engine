@@ -72,8 +72,24 @@
 
             <!-- Map -->
             <div class="card map-card" style="margin-bottom:16px;">
-                <div class="card-title">GLOBAL RISK MAP <span class="badge-sm">Live</span></div>
-                <div id="map" style="height:300px;border-radius:8px;"></div>
+                <div class="card-title">GLOBAL RISK MAP <span class="badge-sm">BY ORIGIN COUNTRY</span></div>
+                <div id="map" style="height:400px;border-radius:8px;position:relative;">
+                    <!-- Hover info box -->
+                    <div id="map-info" class="map-info-box" style="display:none;"></div>
+                    <!-- Color legend -->
+                    <div id="map-legend" class="map-legend">
+                        <div class="legend-title">Avg Risk Score</div>
+                        <div class="legend-gradient"></div>
+                        <div class="legend-labels"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span></div>
+                        <div class="legend-items">
+                            <span class="legend-dot" style="background:#3fb950"></span> Low Risk (0-20)
+                            <span class="legend-dot" style="background:#d29922;margin-left:8px"></span> Medium (20-50)
+                            <span class="legend-dot" style="background:#f85149;margin-left:8px"></span> High Risk (50-80)
+                            <span class="legend-dot" style="background:#da3633;margin-left:8px"></span> Critical (&gt;80)
+                        </div>
+                        <div id="map-summary" class="legend-summary"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Row 2: Donut + Histogram + Critical Origins -->

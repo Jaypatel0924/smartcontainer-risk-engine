@@ -198,6 +198,7 @@ def api_map_data():
 
     # Aggregate by origin + risk level
     grouped = preds.groupby(['Origin_Country','Risk_Level']).size().reset_index(name='count')
+    avg_scores = preds.groupby('Origin_Country')['Risk_Score'].mean()
     result = []
     for country in preds['Origin_Country'].unique():
         if country not in coords or country == 'ZZ':
@@ -208,10 +209,12 @@ def api_map_data():
         critical = int(c_data[c_data['Risk_Level']=='Critical']['count'].sum()) if len(c_data[c_data['Risk_Level']=='Critical']) else 0
         low_risk = int(c_data[c_data['Risk_Level']=='Low Risk']['count'].sum()) if len(c_data[c_data['Risk_Level']=='Low Risk']) else 0
         clear = total - critical - low_risk
+        avg_score = round(float(avg_scores.get(country, 0)), 1)
         result.append({
             'country': country, 'lat': lat, 'lng': lng,
             'total': total, 'critical': critical,
-            'low_risk': low_risk, 'clear': clear
+            'low_risk': low_risk, 'clear': clear,
+            'avg_risk_score': avg_score
         })
     return jsonify(sorted(result, key=lambda x: x['critical'], reverse=True))
 
