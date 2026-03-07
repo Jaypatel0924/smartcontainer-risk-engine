@@ -444,15 +444,34 @@ async function handleFile(file) {
         alert('Please upload a CSV file');
         return;
     }
+    const maxSize = 95 * 1024 * 1024; // 95 MB
+    if (file.size > maxSize) {
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        alert(`File too large (${sizeMB} MB). Maximum upload size is 95 MB. Please reduce the file size and try again.`);
+        return;
+    }
     const resultsDiv = document.getElementById('upload-results');
     resultsDiv.style.display = 'block';
-    resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Processing...</div>';
+    resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Processing... This may take a moment for large files.</div>';
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
         const res = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok) {
+            if (contentType.includes('application/json')) {
+                const errData = await res.json();
+                resultsDiv.innerHTML = `<p class="text-red" style="text-align:center;padding:20px;">Error: ${errData.error || 'Upload failed'}</p>`;
+            } else {
+                const text = await res.text();
+                const msg = res.status === 413 ? 'File too large. Maximum upload size is 95 MB.'
+                    : `Server error (${res.status}): ${text.substring(0, 200)}`;
+                resultsDiv.innerHTML = `<p class="text-red" style="text-align:center;padding:20px;">Error: ${msg}</p>`;
+            }
+            return;
+        }
         const d = await res.json();
         if (d.error) {
             resultsDiv.innerHTML = `<p class="text-red" style="text-align:center;padding:20px;">Error: ${d.error}</p>`;
@@ -491,6 +510,7 @@ document.head.appendChild(style);
 
 // ── Chatbot ─────────────────────────────────────────────────────────────────
 let chatOpen = false;
+let geminiKeySet = false;
 
 function toggleChat() {
     const panel = document.getElementById('chat-panel');
@@ -500,6 +520,35 @@ function toggleChat() {
         document.getElementById('chat-input').focus();
         document.getElementById('chat-badge').style.display = 'none';
     }
+}
+
+function toggleKeyInput() {
+    const bar = document.getElementById('chat-key-bar');
+    bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+    if (bar.style.display === 'flex') document.getElementById('gemini-key-input').focus();
+}
+
+function saveGeminiKey() {
+    const input = document.getElementById('gemini-key-input');
+    const key = input.value.trim();
+    if (!key) return;
+    fetch(`${API}/api/chat/set_key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.message) {
+            geminiKeySet = true;
+            appendChatMsg('bot', '✅ Gemini API key set! Ask me anything about your data.');
+            document.getElementById('chat-key-bar').style.display = 'none';
+            input.value = '';
+        } else {
+            appendChatMsg('bot', '❌ ' + (data.error || 'Failed to set key.'));
+        }
+    })
+    .catch(() => appendChatMsg('bot', '❌ Failed to connect to server.'));
 }
 
 function sendChat() {
