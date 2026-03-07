@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+*.md
+!README.md
+dashboard_old.py
+.streamlit/
+*.bat
+*.sh
