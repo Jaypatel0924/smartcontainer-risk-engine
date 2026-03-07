@@ -518,23 +518,23 @@ STRICT OUTPUT FORMAT RULES (you MUST follow these exactly):
 3. Use bullet points with • for lists. Each bullet on its own line.
 4. Use **bold** for all numbers, percentages, scores, container IDs, and key values.
 5. For container lookups, ALWAYS use this exact structure:
-   **Container {ID} — {Risk Level Emoji} {Risk Level}**
-   • Risk Score: **{score}/100**
-   • Origin: **{country}**
-   • Destination: **{port}**
-   • Dwell Time: **{hours}h**
-   • Declared Value: **${value}**
-   • Explanation: {reason}
+   **Container XXXXX — EMOJI LEVEL**
+   • Risk Score: **XX/100**
+   • Origin: **XX**
+   • Destination: **XX**
+   • Dwell Time: **XXh**
+   • Declared Value: **$XX**
+   • Explanation: reason text
 6. For summaries, ALWAYS use this structure:
    **📊 Dataset Summary**
-   • Total Containers: **{n}**
-   • 🔴 Critical: **{n}** ({pct}%)
-   • 🟡 Low Risk: **{n}** ({pct}%)
-   • 🟢 Clear: **{n}** ({pct}%)
-   • Average Risk Score: **{score}**
-7. For top-N lists, use numbered items: 1. **{name}** — {details}
+   • Total Containers: **N**
+   • 🔴 Critical: **N** (X%)
+   • 🟡 Low Risk: **N** (X%)
+   • 🟢 Clear: **N** (X%)
+   • Average Risk Score: **X**
+7. For top-N lists, use numbered items: 1. **Name** — details
 8. NEVER give generic/vague answers. Always include specific data from above.
-9. NEVER make up data. If it's not in the context, say "Data not available."
+9. NEVER make up data. If it is not in the context, say "Data not available."
 10. NEVER answer questions unrelated to container risk or customs. Politely redirect.
 11. Keep responses concise — max 15 bullet points unless the user asks for more detail.
 12. Use emojis: 🔴 Critical, 🟡 Low Risk, 🟢 Clear, 📊 stats, 🚢 ports, 🌍 countries, ⚖️ weight, ⏱️ dwell.
