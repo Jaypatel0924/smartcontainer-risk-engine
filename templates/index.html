@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartContainer Risk Engine</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">SC</div>
+            <div class="brand-text">
+                <span class="brand-title">SmartContainer</span>
+                <span class="brand-sub">Risk Engine v2.0</span>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-group-label">OVERVIEW</div>
+            <a href="#" class="nav-item active" data-page="dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </a>
+            <a href="#" class="nav-item" data-page="predictions">
+                <span class="nav-icon">🔍</span> Predictions
+            </a>
+            <div class="nav-group-label">INTELLIGENCE</div>
+            <a href="#" class="nav-item" data-page="features">
+                <span class="nav-icon">📈</span> Feature Analysis
+            </a>
+            <a href="#" class="nav-item" data-page="metrics">
+                <span class="nav-icon">⊾</span> Model Metrics
+            </a>
+            <div class="nav-group-label">DATA</div>
+            <a href="#" class="nav-item" data-page="import">
+                <span class="nav-icon">⬆</span> Import CSV
+            </a>
+            <a href="#" class="nav-item" data-page="config">
+                <span class="nav-icon">⚙</span> Configuration
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-footer-badge">HackaMINEd 2026</div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <h1 class="topbar-title"><em>SmartContainer Risk Engine</em></h1>
+            </div>
+            <div class="topbar-badges">
+                <span class="badge badge-outline-green">RF + Isolation Forest</span>
+                <span class="badge badge-green">Acc: 99.82%</span>
+            </div>
+            <div class="topbar-actions">
+                <button class="btn-import" onclick="navigateTo('import')">⬆ Import CSV</button>
+                <span class="topbar-time" id="topbar-time"></span>
+            </div>
+        </header>
+
+        <!-- Page: Dashboard -->
+        <section class="page active" id="page-dashboard">
+            <!-- KPI Strip -->
+            <div class="kpi-strip" id="kpi-strip"></div>
+
+            <!-- Map -->
+            <div class="card map-card" style="margin-bottom:16px;">
+                <div class="card-title">GLOBAL RISK MAP <span class="badge-sm">Live</span></div>
+                <div id="map" style="height:300px;border-radius:8px;"></div>
+            </div>
+
+            <!-- Row 2: Donut + Histogram + Critical Origins -->
+            <div class="grid-3">
+                <div class="card">
+                    <div class="card-title">RISK DISTRIBUTION</div>
+                    <div class="chart-container"><canvas id="donutChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">SCORE HISTOGRAM</div>
+                    <div class="chart-container"><canvas id="histChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">CRITICAL ORIGINS <span class="badge-sm">Top 6</span></div>
+                    <div id="critical-origins"></div>
+                </div>
+            </div>
+
+            <!-- Row 3: Feature Importance + High-Risk Ports + Model Perf -->
+            <div class="grid-3" style="margin-top:12px;">
+                <div class="card">
+                    <div class="card-title">FEATURE IMPORTANCE <span class="badge-sm">RF</span></div>
+                    <div id="feat-importance"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">HIGH-RISK PORTS <span class="badge-sm">Top 8</span></div>
+                    <div id="high-risk-ports"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">MODEL PERFORMANCE</div>
+                    <div id="model-perf"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Page: Predictions -->
+        <section class="page" id="page-predictions">
+            <div class="card">
+                <div class="pred-header">
+                    <div class="pred-filters">
+                        <input type="text" id="pred-search" class="search-input" placeholder="Search ID, origin, port, HS code...">
+                        <div class="level-filters">
+                            <button class="level-btn active" data-level="ALL">ALL</button>
+                            <button class="level-btn" data-level="Critical">CRITICAL</button>
+                            <button class="level-btn" data-level="Low Risk">LOW RISK</button>
+                            <button class="level-btn" data-level="Clear">CLEAR</button>
+                        </div>
+                    </div>
+                    <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="pred-table">
+                        <thead>
+                            <tr>
+                                <th>Container ID</th>
+                                <th>Risk Score</th>
+                                <th>Level</th>
+                                <th>Origin</th>
+                                <th>Destination</th>
+                                <th>Dwell (H)</th>
+                                <th>Value</th>
+                                <th>Explanation</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pred-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </section>
+
+        <!-- Page: Feature Analysis -->
+        <section class="page" id="page-features">
+            <div class="grid-3">
+                <div class="card" style="grid-column: span 2;">
+                    <div class="card-title">ALL FEATURES RANKED <span class="badge-sm">Importance %</span></div>
+                    <div id="all-features"></div>
+                </div>
+                <div>
+                    <div class="card" style="margin-bottom:16px;">
+                        <div class="card-title">TOP CRITICAL HS CODES <span class="badge-sm">Top 5</span></div>
+                        <div id="top-hs-codes"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">RISK BY TRADE REGIME</div>
+                        <div id="risk-regime"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Page: Model Metrics -->
+        <section class="page" id="page-metrics">
+            <div class="grid-3">
+                <div class="card">
+                    <div class="card-title">CLASSIFICATION PERFORMANCE</div>
+                    <div id="class-perf"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">ALGORITHM STACK</div>
+                    <div id="algo-stack"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">SCORE BAND DISTRIBUTION</div>
+                    <div id="score-bands"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Page: Import CSV -->
+        <section class="page" id="page-import">
+            <div class="card import-card">
+                <div class="upload-zone" id="upload-zone">
+                    <div class="upload-icon">⬆</div>
+                    <h3>Drop CSV file here or click to browse</h3>
+                    <p class="text-muted">HackaMINEd format · Max 200MB</p>
+                    <input type="file" id="csv-file" accept=".csv" hidden>
+                    <button class="btn-browse" onclick="document.getElementById('csv-file').click()">Browse Files</button>
+                    <p class="text-muted" style="margin-top:12px;font-size:0.7rem;">Required: Container_ID, Declared_Weight, Measured_Weight, Dwell_Time_Hours, Declared_Value, HS_Code, Trade_Regime, Origin_Country, Destination_Port</p>
+                </div>
+                <div id="upload-results" style="display:none;"></div>
+            </div>
+        </section>
+
+        <!-- Page: Configuration -->
+        <section class="page" id="page-config">
+            <div class="grid-3">
+                <div class="card cfg-card"><div class="cfg-label">MODEL TYPE</div><div class="cfg-value">Random Forest</div><div class="cfg-sub">sklearn.ensemble · n_estimators=300</div></div>
+                <div class="card cfg-card"><div class="cfg-label">ANOMALY DETECTOR</div><div class="cfg-value">Isolation Forest</div><div class="cfg-sub">contamination=3% · n_estimators=200</div></div>
+                <div class="card cfg-card cfg-green"><div class="cfg-label">DATASET</div><div class="cfg-value" id="cfg-records">—</div><div class="cfg-sub">Trained on historical data</div></div>
+            </div>
+            <div class="grid-3" style="margin-top:16px;">
+                <div class="card cfg-card"><div class="cfg-label">FEATURES</div><div class="cfg-value">15 engineered</div><div class="cfg-sub">Weight, dwell, HS, value</div></div>
+                <div class="card cfg-card"><div class="cfg-label">CLASSES</div><div class="cfg-value">3 levels</div><div class="cfg-sub">Critical / Low Risk / Clear</div></div>
+                <div class="card cfg-card"><div class="cfg-label">EXPLAINABILITY</div><div class="cfg-value">Rule-based</div><div class="cfg-sub">SHAP-style reasons</div></div>
+            </div>
+            <div class="grid-2" style="margin-top:16px;">
+                <div class="card">
+                    <div class="card-title">RISK SCORE THRESHOLDS</div>
+                    <div class="cfg-row"><span>Critical</span><span class="text-red">≥ 50</span></div>
+                    <div class="cfg-row"><span>Low Risk</span><span class="text-yellow">20 – 49</span></div>
+                    <div class="cfg-row"><span>Clear</span><span class="text-green">&lt; 20</span></div>
+                    <div class="cfg-row"><span>Weight Discrepancy Flag</span><span>&gt; 20%</span></div>
+                    <div class="cfg-row"><span>High Dwell</span><span>&gt; 72 h</span></div>
+                    <div class="cfg-row"><span>Very High Dwell</span><span>&gt; 120 h</span></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">OUTPUT FIELDS</div>
+                    <div class="cfg-row"><span>Risk_Score</span><span class="mono">0 – 100</span></div>
+                    <div class="cfg-row"><span>Risk_Level</span><span class="mono text-red">Critical / Low / Clear</span></div>
+                    <div class="cfg-row"><span>Explanation</span><span class="mono">Rule-based</span></div>
+                    <div class="cfg-row"><span>Export</span><span class="mono">CSV download</span></div>
+                    <div class="cfg-row"><span>Status</span><span class="status-active">Active</span></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
