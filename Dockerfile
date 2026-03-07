@@ -25,5 +25,5 @@ EXPOSE 5000
 # Health check
 HEALTHCHECK CMD curl --fail http://localhost:5000/api/stats || exit 1
 
-# Run with gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]
+# Run with gunicorn for production (Render sets PORT env var)
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120 app:app
