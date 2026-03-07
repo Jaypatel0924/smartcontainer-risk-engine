@@ -384,6 +384,8 @@ def api_chat():
         err = str(e)
         if 'API_KEY_INVALID' in err or 'invalid' in err.lower():
             return jsonify({'reply': '❌ Invalid API key. Please set a valid Gemini API key using the 🔑 button.'})
+        if '429' in err or 'quota' in err.lower() or 'rate' in err.lower():
+            return jsonify({'reply': '⏳ **Rate limit reached.** Your Gemini API free tier quota is exhausted. Please wait a minute and try again, or enable billing on your Google AI account for higher limits.'})
         return jsonify({'reply': f'⚠️ Error: {err}'})
 
 
@@ -520,7 +522,7 @@ INSTRUCTIONS:
 """
 
     model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash',
+        model_name='gemini-2.5-flash',
         system_instruction=system_prompt
     )
 
