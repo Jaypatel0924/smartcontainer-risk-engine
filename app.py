@@ -11,12 +11,12 @@ from predict import RiskPredictor
 from utils import load_data
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.config['MAX_CONTENT_LENGTH'] = 95 * 1024 * 1024  # 95 MB (Render proxy limit ~100MB)
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB
 
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
-    return jsonify({'error': 'File too large. Maximum upload size is 95 MB.'}), 413
+    return jsonify({'error': 'File too large. Maximum upload size is 200 MB.'}), 413
 
 
 # ── Cache ────────────────────────────────────────────────────────────────────
@@ -272,9 +272,23 @@ def api_upload():
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'Only CSV files accepted'}), 400
 
+    import tempfile, gc
+    tmp_path = None
     try:
-        df = pd.read_csv(io.BytesIO(file.read()))
+        # Save to temp file to avoid memory issues with large uploads
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
+            tmp_path = tmp.name
+            chunk_size = 8 * 1024 * 1024  # 8MB chunks
+            while True:
+                chunk = file.read(chunk_size)
+                if not chunk:
+                    break
+                tmp.write(chunk)
+
+        df = pd.read_csv(tmp_path)
     except Exception as e:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
         return jsonify({'error': f'Failed to read CSV: {str(e)}'}), 400
 
     required = ['Container_ID','Declared_Weight','Measured_Weight','Dwell_Time_Hours','Declared_Value']
@@ -312,6 +326,11 @@ def api_upload():
             preds[col] = df[col].values
     if 'Trade_Regime (Import / Export / Transit)' in df.columns:
         preds['Trade_Regime'] = df['Trade_Regime (Import / Export / Transit)'].values
+
+    # Clean up temp file
+    if tmp_path and os.path.exists(tmp_path):
+        os.unlink(tmp_path)
+    gc.collect()
 
     _cache['preds'] = preds
     _cache['df'] = df

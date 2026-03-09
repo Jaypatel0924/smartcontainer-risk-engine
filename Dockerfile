@@ -4,19 +4,18 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for building, then remove after pip install
+COPY requirements.txt .
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first (layer caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/* /root/.cache
 
 # Copy application code
 COPY . .
 
-# Create output directory
+# Create directories
 RUN mkdir -p output models
 
 # Expose Flask port

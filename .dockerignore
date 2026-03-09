@@ -6,6 +6,13 @@ __pycache__/
 *.md
 !README.md
 dashboard_old.py
+dashboard.py
+eda_analysis.py
+batch_predict.py
+run_pipeline.py
+main.py
 .streamlit/
 *.bat
 *.sh
+output/
+data/realtime_data.csv
