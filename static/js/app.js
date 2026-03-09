@@ -211,7 +211,7 @@ function renderMapMarkers() {
     mapMarkers = [];
 
     window._mapData.forEach(d => {
-        const radius = Math.max(5, Math.min(25, Math.sqrt(d.total) * 1.5));
+        const radius = Math.max(8, Math.min(35, Math.sqrt(d.total) * 1.8));
         let color = '#3fb950';
         if (d.critical > 0) color = '#f85149';
         else if (d.low_risk > 0) color = '#d29922';
@@ -219,19 +219,30 @@ function renderMapMarkers() {
         const circle = L.circleMarker([d.lat, d.lng], {
             radius: radius,
             fillColor: color,
-            fillOpacity: 0.6,
+            fillOpacity: 0.5,
             color: color,
             weight: 1,
-            opacity: 0.8
+            opacity: 0.7
         }).addTo(map);
 
+        // Show popup on hover
         circle.bindPopup(`
-            <div class="popup-title">${d.country}</div>
-            <div class="popup-row"><span class="popup-label">Total</span><span>${d.total}</span></div>
-            <div class="popup-row"><span class="popup-label">Critical</span><span style="color:#f85149">${d.critical}</span></div>
-            <div class="popup-row"><span class="popup-label">Low Risk</span><span style="color:#d29922">${d.low_risk}</span></div>
-            <div class="popup-row"><span class="popup-label">Clear</span><span style="color:#3fb950">${d.clear}</span></div>
-        `);
+            <div class="popup-content">
+                <div class="popup-title">${d.country}</div>
+                <div class="popup-row"><span class="popup-label">Total</span><span class="popup-val">${d.total.toLocaleString()}</span></div>
+                <div class="popup-row"><span class="popup-label">Critical</span><span class="popup-val" style="color:#f85149">${d.critical}</span></div>
+                <div class="popup-row"><span class="popup-label">Low Risk</span><span class="popup-val" style="color:#d29922">${d.low_risk}</span></div>
+                <div class="popup-row"><span class="popup-label">Clear</span><span class="popup-val" style="color:#3fb950">${d.clear}</span></div>
+            </div>
+        `, { closeButton: true, className: 'dark-popup' });
+
+        circle.on('mouseover', function() {
+            this.setStyle({ fillOpacity: 0.8, weight: 2, opacity: 1 });
+            this.openPopup();
+        });
+        circle.on('mouseout', function() {
+            this.setStyle({ fillOpacity: 0.5, weight: 1, opacity: 0.7 });
+        });
 
         // Pulse animation for critical
         if (d.critical > 2) {

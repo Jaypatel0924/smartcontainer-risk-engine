@@ -477,9 +477,19 @@ body {
 }
 .leaflet-popup-tip { background: var(--card) !important; }
 .leaflet-popup-content { font-family: 'Inter', sans-serif !important; font-size: 12px !important; }
-.popup-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
-.popup-row { display: flex; justify-content: space-between; padding: 3px 0; }
-.popup-label { color: var(--text2); }
+.popup-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; color: #fff; }
+.popup-row { display: flex; justify-content: space-between; padding: 4px 0; gap: 20px; }
+.popup-label { color: var(--text2); font-size: 13px; }
+.popup-val { font-weight: 700; font-size: 14px; }
+.popup-content { min-width: 140px; }
+.dark-popup .leaflet-popup-content-wrapper {
+    background: rgba(22,27,34,0.95) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    backdrop-filter: blur(12px);
+}
+.dark-popup .leaflet-popup-tip { background: rgba(22,27,34,0.95) !important; }
 
 /* ── Loading Spinner ─────────────────────────────────────────────────────── */
 .loading {

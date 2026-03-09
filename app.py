@@ -370,12 +370,22 @@ def api_chat():
         if key:
             _gemini_key = key
             _chat_sessions.clear()
-            return jsonify({'reply': '✅ Gemini API key set! You can now ask questions about your data.'})
+            return jsonify({'reply': '✅ Gemini API key set! You can now ask complex analysis questions.'})
 
+    # Try answering from data first
+    data_reply = answer_from_data(msg)
+    if data_reply:
+        return jsonify({'reply': data_reply})
+
+    # If data can't answer, use Gemini
     if not _gemini_key:
-        return jsonify({'reply': ('⚠️ **Gemini API key not set.**\n\n'
-                                  'Click the 🔑 button in the chat header to enter your key, '
-                                  'or type: **key: YOUR_API_KEY**')})
+        return jsonify({'reply': ('I don\'t have enough data to answer that question directly.\n\n'
+                                  '💡 Set a **Gemini API key** (🔑 button) to enable AI-powered analysis '
+                                  'for complex questions.\n\nOr try asking:\n'
+                                  '• "summary" — dataset overview\n'
+                                  '• "top critical countries" — highest risk origins\n'
+                                  '• "container 12345" — lookup a specific container\n'
+                                  '• "high risk ports" — riskiest destinations')})
 
     try:
         reply = gemini_chat(msg)
@@ -387,6 +397,165 @@ def api_chat():
         if 'API_KEY_INVALID' in err:
             return jsonify({'reply': '❌ Invalid API key. Please set a valid Gemini API key using the 🔑 button.'})
         return jsonify({'reply': '⚠️ Something went wrong. Please try again in a moment.'})
+
+
+def answer_from_data(msg):
+    """Try to answer the question directly from data. Returns None if AI is needed."""
+    low = msg.lower().strip()
+    preds = get_predictions()
+    total = len(preds)
+    critical = int((preds['Risk_Level'] == 'Critical').sum())
+    low_risk = int((preds['Risk_Level'] == 'Low Risk').sum())
+    clear = int((preds['Risk_Level'] == 'Clear').sum())
+    avg_score = round(float(preds['Risk_Score'].mean()), 2)
+
+    # Greetings
+    if low in ('hi', 'hello', 'hey', 'hii', 'hiii', 'yo', 'sup'):
+        return ('👋 Hello! I\'m the Risk Assistant.\n\n'
+                'I can answer questions about your container data directly. Try:\n'
+                '• **"summary"** — dataset overview\n'
+                '• **"top critical countries"** — highest risk origins\n'
+                '• **"high risk ports"** — riskiest destinations\n'
+                '• **"container 12345"** — lookup a specific container\n'
+                '• **"features"** — feature importance ranking\n\n'
+                'For complex analysis, set a **Gemini API key** with the 🔑 button.')
+
+    # Summary / overview
+    if any(w in low for w in ['summary', 'overview', 'stats', 'statistics', 'how many', 'total container',
+                                'dataset', 'data set', 'tell me about']):
+        return (f'📊 **Dataset Summary**\n\n'
+                f'• Total Containers: **{total:,}**\n'
+                f'• 🔴 Critical: **{critical:,}** ({round(critical/total*100,1)}%)\n'
+                f'• 🟡 Low Risk: **{low_risk:,}** ({round(low_risk/total*100,1)}%)\n'
+                f'• 🟢 Clear: **{clear:,}** ({round(clear/total*100,1)}%)\n'
+                f'• Average Risk Score: **{avg_score}/100**\n'
+                f'• Model Accuracy: **99.82%**')
+
+    # Specific container lookup
+    cid_match = re.search(r'\b(\d{5,})\b', msg)
+    if cid_match:
+        cid = cid_match.group(1)
+        row = preds[preds['Container_ID'].astype(str) == cid]
+        if len(row) == 0:
+            return f'❌ Container **{cid}** was not found in the dataset.'
+        r = row.iloc[0]
+        level = r['Risk_Level']
+        emoji = '🔴' if level == 'Critical' else '🟡' if level == 'Low Risk' else '🟢'
+        reply = f'**Container {cid} — {emoji} {level}**\n\n'
+        reply += f'• Risk Score: **{r["Risk_Score"]:.1f}/100**\n'
+        for col, label in [('Origin_Country','Origin'), ('Destination_Port','Destination'),
+                           ('Dwell_Time_Hours','Dwell Time'), ('Declared_Value','Declared Value'),
+                           ('HS_Code','HS Code'), ('Declared_Weight','Declared Weight'),
+                           ('Measured_Weight','Measured Weight')]:
+            if col in r.index and pd.notna(r.get(col)):
+                val = r[col]
+                if col == 'Dwell_Time_Hours':
+                    val = f'{val:.1f}h'
+                elif col == 'Declared_Value':
+                    val = f'${val:,.0f}' if isinstance(val, (int, float)) else val
+                elif col in ('Declared_Weight', 'Measured_Weight'):
+                    val = f'{val:,.1f} kg' if isinstance(val, (int, float)) else val
+                reply += f'• {label}: **{val}**\n'
+        if 'Explanation' in r.index and pd.notna(r.get('Explanation')):
+            reply += f'• Explanation: {r["Explanation"]}'
+        return reply
+
+    # Critical countries / origins
+    if any(w in low for w in ['critical countr', 'critical origin', 'top critical', 'riskiest countr',
+                                'high risk countr', 'dangerous countr', 'which countr']):
+        if 'Origin_Country' in preds.columns:
+            crit = preds[preds['Risk_Level'] == 'Critical']['Origin_Country'].value_counts().head(10)
+            reply = '🌍 **Top Critical Origins**\n\n'
+            for i, (country, count) in enumerate(crit.items(), 1):
+                total_c = len(preds[preds['Origin_Country'] == country])
+                pct = round(count / total_c * 100, 1)
+                reply += f'{i}. **{country}** — {count} critical out of {total_c:,} ({pct}%)\n'
+            return reply
+
+    # High risk ports
+    if any(w in low for w in ['port', 'destination', 'riskiest port', 'high risk port']):
+        if 'Destination_Port' in preds.columns:
+            port_risk = preds.groupby('Destination_Port')['Risk_Score'].mean().nlargest(10).round(1)
+            reply = '🚢 **Highest Risk Ports** (by avg score)\n\n'
+            for i, (port, score) in enumerate(port_risk.items(), 1):
+                cnt = len(preds[preds['Destination_Port'] == port])
+                reply += f'{i}. **{port}** — avg score **{score}**, {cnt:,} containers\n'
+            return reply
+
+    # Feature importance
+    if any(w in low for w in ['feature', 'importance', 'important', 'which feature']):
+        feat_imp = get_feature_importances()
+        reply = '📈 **Feature Importance** (Random Forest)\n\n'
+        for i, f in enumerate(feat_imp[:10], 1):
+            reply += f'{i}. **{f["name"]}** — {f["value"]}%\n'
+        return reply
+
+    # Weight discrepancy
+    if any(w in low for w in ['weight', 'discrepanc']):
+        if 'Declared_Weight' in preds.columns and 'Measured_Weight' in preds.columns:
+            wt_diff = ((preds['Measured_Weight'] - preds['Declared_Weight']).abs()
+                       / preds['Declared_Weight'].replace(0, 1) * 100)
+            high = int((wt_diff > 20).sum())
+            reply = (f'⚖️ **Weight Discrepancy Analysis**\n\n'
+                     f'• Average discrepancy: **{wt_diff.mean():.1f}%**\n'
+                     f'• Max discrepancy: **{wt_diff.max():.1f}%**\n'
+                     f'• Containers with >20% discrepancy: **{high:,}**\n'
+                     f'• Threshold for flagging: **>20%**')
+            return reply
+
+    # Dwell time
+    if any(w in low for w in ['dwell', 'time', 'how long', 'stuck']):
+        if 'Dwell_Time_Hours' in preds.columns:
+            dwell = preds['Dwell_Time_Hours']
+            high72 = int((dwell > 72).sum())
+            high120 = int((dwell > 120).sum())
+            reply = (f'⏱️ **Dwell Time Analysis**\n\n'
+                     f'• Average dwell: **{dwell.mean():.1f}h**\n'
+                     f'• Max dwell: **{dwell.max():.1f}h**\n'
+                     f'• Containers >72h (high): **{high72:,}**\n'
+                     f'• Containers >120h (very high): **{high120:,}**\n'
+                     f'• Thresholds: >72h = high, >120h = very high')
+            return reply
+
+    # Model info
+    if any(w in low for w in ['model', 'accuracy', 'algorithm', 'how does', 'how do you']):
+        return ('🤖 **Model Information**\n\n'
+                '• Primary: **Random Forest** (300 estimators, max_depth=30)\n'
+                '• Anomaly: **Isolation Forest** (contamination=3%)\n'
+                '• Risk Score: **70% RF probability + 30% anomaly score**\n'
+                '• Accuracy: **99.82%** (test), **99.98%** (validation)\n'
+                '• F1 Critical: **96.68%**, F1 Low Risk: **99.62%**\n'
+                '• Features: **15** engineered, **3** classes\n'
+                '• Training: **SMOTE**-balanced sampling')
+
+    # Top riskiest containers
+    if any(w in low for w in ['riskiest', 'highest risk', 'most dangerous', 'top risk', 'worst']):
+        top5 = preds.nlargest(5, 'Risk_Score')
+        reply = '🔴 **Top 5 Highest Risk Containers**\n\n'
+        for i, (_, r) in enumerate(top5.iterrows(), 1):
+            origin = r.get('Origin_Country', '?')
+            reply += (f'{i}. **Container {r["Container_ID"]}** — '
+                      f'Score **{r["Risk_Score"]:.1f}**, '
+                      f'Origin **{origin}**, '
+                      f'Level **{r["Risk_Level"]}**\n')
+        return reply
+
+    # Help
+    if any(w in low for w in ['help', 'what can you', 'commands', 'menu']):
+        return ('🤖 **I can answer these questions from your data:**\n\n'
+                '• **"summary"** — full dataset overview\n'
+                '• **"container 12345"** — lookup any container by ID\n'
+                '• **"top critical countries"** — riskiest origins\n'
+                '• **"high risk ports"** — riskiest destinations\n'
+                '• **"features"** — feature importance ranking\n'
+                '• **"weight"** — weight discrepancy analysis\n'
+                '• **"dwell"** — dwell time analysis\n'
+                '• **"riskiest"** — top risk containers\n'
+                '• **"model"** — model architecture info\n\n'
+                '💡 For complex questions, set a **Gemini API key** (🔑 button).')
+
+    # No match — return None so it falls through to Gemini
+    return None
 
 
 def build_data_context():
