@@ -299,7 +299,12 @@ def api_upload():
         if fname.endswith('.csv'):
             df = pd.read_csv(tmp_path)
         else:
-            df = pd.read_excel(tmp_path)
+            try:
+                df = pd.read_excel(tmp_path)
+            except ImportError:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                return jsonify({'error': 'Excel support requires openpyxl. Please upload a CSV file instead.'}), 400
     except Exception as e:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)

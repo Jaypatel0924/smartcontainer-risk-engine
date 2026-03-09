@@ -5,7 +5,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install system dependencies for building, then remove after pip install
-COPY requirements.txt .
+COPY requirements-full.txt requirements.txt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl \
     && pip install --no-cache-dir -r requirements.txt \
