@@ -451,14 +451,16 @@ if (csvInput) {
 }
 
 async function handleFile(file) {
-    if (!file.name.endsWith('.csv')) {
-        alert('Please upload a CSV file');
+    const validExts = ['.csv', '.xlsx', '.xls'];
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validExts.includes(ext)) {
+        alert('Please upload a CSV or Excel (.xlsx/.xls) file');
         return;
     }
-    const maxSize = 95 * 1024 * 1024; // 95 MB
+    const maxSize = 200 * 1024 * 1024; // 200 MB
     if (file.size > maxSize) {
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-        alert(`File too large (${sizeMB} MB). Maximum upload size is 95 MB. Please reduce the file size and try again.`);
+        alert(`File too large (${sizeMB} MB). Maximum upload size is 200 MB.`);
         return;
     }
     const resultsDiv = document.getElementById('upload-results');
@@ -477,7 +479,7 @@ async function handleFile(file) {
                 resultsDiv.innerHTML = `<p class="text-red" style="text-align:center;padding:20px;">Error: ${errData.error || 'Upload failed'}</p>`;
             } else {
                 const text = await res.text();
-                const msg = res.status === 413 ? 'File too large. Maximum upload size is 95 MB.'
+                const msg = res.status === 413 ? 'File too large. Maximum upload size is 200 MB.'
                     : `Server error (${res.status}): ${text.substring(0, 200)}`;
                 resultsDiv.innerHTML = `<p class="text-red" style="text-align:center;padding:20px;">Error: ${msg}</p>`;
             }

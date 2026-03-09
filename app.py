@@ -269,14 +269,16 @@ def api_upload():
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
     file = request.files['file']
-    if not file.filename.endswith('.csv'):
-        return jsonify({'error': 'Only CSV files accepted'}), 400
+    fname = file.filename.lower()
+    if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
+        return jsonify({'error': 'Only CSV and Excel files accepted'}), 400
 
     import tempfile, gc
     tmp_path = None
+    suffix = '.xlsx' if fname.endswith(('.xlsx', '.xls')) else '.csv'
     try:
         # Save to temp file to avoid memory issues with large uploads
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
             chunk_size = 8 * 1024 * 1024  # 8MB chunks
             while True:
@@ -285,11 +287,14 @@ def api_upload():
                     break
                 tmp.write(chunk)
 
-        df = pd.read_csv(tmp_path)
+        if fname.endswith('.csv'):
+            df = pd.read_csv(tmp_path)
+        else:
+            df = pd.read_excel(tmp_path)
     except Exception as e:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
-        return jsonify({'error': f'Failed to read CSV: {str(e)}'}), 400
+        return jsonify({'error': f'Failed to read file: {str(e)}'}), 400
 
     required = ['Container_ID','Declared_Weight','Measured_Weight','Dwell_Time_Hours','Declared_Value']
     missing = [c for c in required if c not in df.columns]
