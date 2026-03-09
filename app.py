@@ -6,11 +6,20 @@ from flask import Flask, jsonify, request, send_from_directory, send_file
 import pandas as pd
 import numpy as np
 import pickle, os, io, re
-import google.generativeai as genai
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+# Base directory — ensures paths work on Vercel serverless
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 from predict import RiskPredictor
 from utils import load_data
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+app = Flask(__name__, static_folder=os.path.join(BASE_DIR, 'static'),
+            template_folder=os.path.join(BASE_DIR, 'templates'))
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB
 
 
@@ -25,8 +34,8 @@ _cache = {}
 def get_predictions():
     """Load or return cached predictions"""
     if 'preds' not in _cache:
-        df = load_data('data/historical_data.csv')
-        predictor = RiskPredictor()
+        df = load_data(os.path.join(BASE_DIR, 'data/historical_data.csv'))
+        predictor = RiskPredictor(model_path=os.path.join(BASE_DIR, 'models'))
         preds = predictor.predict(df)
         # Merge original columns
         for col in ['Origin_Country','Destination_Port','Dwell_Time_Hours',
@@ -42,8 +51,8 @@ def get_predictions():
 def get_feature_importances():
     """Get RF feature importances"""
     if 'feat_imp' not in _cache:
-        rf = pickle.load(open('models/random_forest_model.pkl','rb'))
-        fe = pickle.load(open('models/feature_engineer.pkl','rb'))
+        rf = pickle.load(open(os.path.join(BASE_DIR, 'models/random_forest_model.pkl'),'rb'))
+        fe = pickle.load(open(os.path.join(BASE_DIR, 'models/feature_engineer.pkl'),'rb'))
         names = fe.numeric_features
         imp = rf.feature_importances_
         pairs = sorted(zip(names, imp), key=lambda x: x[1], reverse=True)
@@ -64,7 +73,7 @@ def get_feature_importances():
 
 @app.route('/')
 def index():
-    return send_from_directory('templates', 'index.html')
+    return send_from_directory(os.path.join(BASE_DIR, 'templates'), 'index.html')
 
 @app.route('/api/stats')
 def api_stats():
@@ -277,8 +286,8 @@ def api_upload():
     tmp_path = None
     suffix = '.xlsx' if fname.endswith(('.xlsx', '.xls')) else '.csv'
     try:
-        # Save to temp file to avoid memory issues with large uploads
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        # Save to temp file — use /tmp for Vercel serverless compatibility
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=os.environ.get('TMPDIR', None)) as tmp:
             tmp_path = tmp.name
             chunk_size = 8 * 1024 * 1024  # 8MB chunks
             while True:
@@ -320,7 +329,7 @@ def api_upload():
             df[col] = default
 
     try:
-        predictor = RiskPredictor()
+        predictor = RiskPredictor(model_path=os.path.join(BASE_DIR, 'models'))
         preds = predictor.predict(df)
     except Exception as e:
         return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
@@ -677,6 +686,8 @@ def build_container_context(msg):
 
 def gemini_chat(user_msg):
     """Send message to Gemini with full data context."""
+    if genai is None:
+        return 'Gemini AI is not available (google-generativeai not installed).'
     genai.configure(api_key=_gemini_key)
 
     data_ctx = build_data_context()
