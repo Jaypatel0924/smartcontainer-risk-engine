@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: smartcontainer-risk-engine
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: "5000"
+      - key: PYTHON_VERSION
+        value: "3.12"
